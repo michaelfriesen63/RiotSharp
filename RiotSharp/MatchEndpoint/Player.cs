@@ -1,5 +1,6 @@
 ﻿using Newtonsoft.Json;
 using RiotSharp.Misc;
+using RiotSharp.Misc.Converters;
 
 namespace RiotSharp.MatchEndpoint
 {
@@ -20,6 +21,7 @@ namespace RiotSharp.MatchEndpoint
         /// Platform ID.
         /// </summary>
         [JsonProperty("platformId")]
+        [JsonConverter(typeof(PlatformConverter))]
         public Platform PlatformId { get; set; }
 
         /// <summary>
