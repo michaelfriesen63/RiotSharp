@@ -23,6 +23,8 @@ namespace RiotSharp.Misc.Converters
             {
                 case "NA1":
                     return Platform.NA1;
+                case "NA":
+                    return Platform.NA;
                 case "BR1":
                     return Platform.BR1;
                 case "LA1":
@@ -59,6 +61,7 @@ namespace RiotSharp.Misc.Converters
             switch (platform)
             {
                 case Platform.NA1:
+                case Platform.NA:
                     return Region.na;
                 case Platform.BR1:
                     return Region.br;
