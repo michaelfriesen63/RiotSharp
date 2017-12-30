@@ -15,6 +15,11 @@ namespace RiotSharp.Misc
         NA1,
 
         /// <summary>
+        /// North America (legacy accounts).
+        /// </summary>
+        NA,
+
+        /// <summary>
         /// Brasil.
         /// </summary>
         BR1,
