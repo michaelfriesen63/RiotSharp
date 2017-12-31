@@ -65,20 +65,22 @@ namespace RiotSharp
 
         private const string MatchCache = "match-{0}_{1}";
         private const string SummonerCache = "summoner-{0}_{1}";
+        private const string RecentMacheCache = "recentmatch-{0}_{1}";
 
         private static readonly TimeSpan SummonerTtl = TimeSpan.FromDays(30);
         private static readonly TimeSpan MatchTtl = TimeSpan.FromDays(60);
+        private static readonly TimeSpan RecentMatchTtl = TimeSpan.FromMinutes(2);
 
         // Used in call which have a maximum number of items you can retrieve in a single call
         private const int MaxNrSummoners = 40;
 
         private const int MaxNrMasteryPages = 40;
 
-        private readonly IRateLimitedRequester requester;
-
         private static RiotApi instance;
 
-        private ICache cache;
+        private readonly IRateLimitedRequester requester;
+
+        private readonly ICache cache;
         #endregion
 
         /// <summary>
@@ -126,15 +128,16 @@ namespace RiotSharp
                 apiKey != Requesters.RiotApiRequester.ApiKey ||
                 !rateLimits.Equals(Requesters.RiotApiRequester.RateLimits))
             {
-                instance = new RiotApi(apiKey, rateLimits);
+                instance = new RiotApi(apiKey, rateLimits, cache);
             }
             return instance;
         }
 
-        private RiotApi(string apiKey, IDictionary<TimeSpan, int> rateLimits)
+        private RiotApi(string apiKey, IDictionary<TimeSpan, int> rateLimits, ICache cache)
         {
             Requesters.RiotApiRequester = new RateLimitedRequester(apiKey, rateLimits);
             requester = Requesters.RiotApiRequester;
+            this.cache = cache;
         }
 
         /// <summary>
@@ -464,19 +467,33 @@ namespace RiotSharp
 
         public List<MatchReference> GetRecentMatches(Region region, long accountId)
         {
-            var json = requester.CreateGetRequest(
-                MatchListRootUrl + string.Format(MatchListByAccountIdRecentUrl, accountId),
-                region);
-            return JsonConvert.DeserializeObject<MatchList>(json).Matches;
+            var wrapper = cache.Get<string, List<MatchReference>>(string.Format(RecentMacheCache, region, accountId));
+            if (wrapper == null)
+            {
+                var json = requester.CreateGetRequest(
+                    MatchListRootUrl + string.Format(MatchListByAccountIdRecentUrl, accountId),
+                    region);
+                wrapper = JsonConvert.DeserializeObject<MatchList>(json).Matches;
+                cache.Add<string, List<MatchReference>>(string.Format(RecentMacheCache, region, accountId), wrapper, DateTime.Now + RecentMatchTtl);
+            }
+
+            return wrapper;
         }
 
         public async Task<List<MatchReference>> GetRecentMatchesAsync(Region region, long accountId)
         {
-            var json = await requester.CreateGetRequestAsync(
-                MatchListRootUrl + string.Format(MatchListByAccountIdRecentUrl, accountId),
-                region);
-            return (await Task.Factory.StartNew(() =>
-                JsonConvert.DeserializeObject<MatchList>(json))).Matches;
+            var wrapper = cache.Get<string, List<MatchReference>>(string.Format(RecentMacheCache, region, accountId));
+            if (wrapper == null)
+            {
+                var json = await requester.CreateGetRequestAsync(
+                    MatchListRootUrl + string.Format(MatchListByAccountIdRecentUrl, accountId),
+                    region);
+                wrapper = (await Task.Factory.StartNew(() =>
+                    JsonConvert.DeserializeObject<MatchList>(json))).Matches;
+                cache.Add<string, List<MatchReference>>(string.Format(RecentMacheCache, region, accountId), wrapper, DateTime.Now + RecentMatchTtl);
+            }
+
+            return wrapper;
         }
         #endregion
 

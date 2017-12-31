@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Threading;
 
 namespace RiotSharp
@@ -8,12 +7,8 @@ namespace RiotSharp
     public class Cache : ICache
     {
         private IDictionary<object, CacheItem> cache = new Dictionary<object, CacheItem>();
-        private IDictionary<object, SlidingDetails> slidingTimes = new Dictionary<object, SlidingDetails>();
 
-        private const int DefaultMonitorWait = 1000;
-        private const int MonitorWaitToUpdateSliding = 500;
-
-        private readonly object sync = new object();
+        private readonly ReaderWriterLockSlim _lock = new ReaderWriterLockSlim();
 
         #region ICache interface
         /// <summary>
@@ -41,9 +36,9 @@ namespace RiotSharp
         /// be purged from the cache.</param>
         public void Add<K, V>(K key, V value, DateTime absoluteExpiry) where V : class
         {
-            if (absoluteExpiry > DateTime.Now)
+            var diff = absoluteExpiry - DateTime.Now;
+            if (diff > TimeSpan.Zero)
             {
-                var diff = absoluteExpiry - DateTime.Now;
                 Add(key, value, diff, false);
             }
         }
@@ -57,30 +52,22 @@ namespace RiotSharp
         /// <returns>The value if the key exists in the cache, null otherwise.</returns>
         public V Get<K, V>(K key) where V : class
         {
-            if (cache.ContainsKey(key))
+            _lock.EnterReadLock();
+            try
             {
-                var cacheItem = cache[key];
-
-                if (cacheItem.RelativeExpiry.HasValue)
+                if (cache.TryGetValue(key, out CacheItem item))
                 {
-                    if (Monitor.TryEnter(sync, MonitorWaitToUpdateSliding))
-                    {
-                        try
-                        {
-                            slidingTimes[key].Viewed();
-                        }
-                        finally
-                        {
-                            Monitor.Exit(sync);
-                        }
-                    }
+                    item.Hit();
+                    return (V)item.Value;
                 }
-
-                return (V)cacheItem.Value;
+                else
+                {
+                    return null;
+                }
             }
-            else
+            finally
             {
-                return null;
+                _lock.ExitReadLock();
             }
         }
 
@@ -91,10 +78,22 @@ namespace RiotSharp
         /// <param name="key">The key.</param>
         public void Remove<K>(K key)
         {
-            if (!Equals(key, null))
+            if (key == null)
             {
-                cache.Remove(key);
-                slidingTimes.Remove(key);
+                throw new ArgumentNullException(nameof(key));
+            }
+
+            _lock.EnterWriteLock();
+            try
+            {
+                if (cache.TryGetValue(key, out CacheItem item))
+                {
+                    RemoveUnderLock(new KeyValuePair<object, CacheItem>(key, item));
+                }
+            }
+            finally
+            {
+                _lock.ExitWriteLock();
             }
         }
 
@@ -103,223 +102,145 @@ namespace RiotSharp
         /// </summary>
         public void Clear()
         {
-            if (Monitor.TryEnter(sync, DefaultMonitorWait))
+            _lock.EnterWriteLock();
+            try
             {
-                try
+                foreach (var pair in cache)
                 {
-                    cache.Clear();
-                    slidingTimes.Clear();
+                    RemoveUnderLock(pair);
                 }
-                finally
-                {
-                    Monitor.Exit(sync);
-                }
+            }
+            finally
+            {
+                _lock.ExitWriteLock();
             }
         }
         #endregion
 
-        /// <summary>
-        /// Enumerator for the keys of a specific type.
-        /// </summary>
-        /// <typeparam name="K">Type of the key.</typeparam>
-        /// <returns>Enumerator for the keys of a specific type.</returns>
-        internal IEnumerable<K> Keys<K>()
-        {
-            if (Monitor.TryEnter(sync, DefaultMonitorWait))
-            {
-                try
-                {
-                    return cache.Keys.Where(k => k.GetType() == typeof(K)).Cast<K>().ToList();
-                }
-                finally
-                {
-                    Monitor.Exit(sync);
-                }
-            }
-            else
-            {
-                return Enumerable.Empty<K>();
-            }
-        }
-
-        /// <summary>
-        /// Enumerator for all keys.
-        /// </summary>
-        /// <returns>Enumerator for all keys.</returns>
-        internal IEnumerable<object> Keys()
-        {
-            if (Monitor.TryEnter(sync, DefaultMonitorWait))
-            {
-                try
-                {
-                    return cache.Keys.ToList();
-                }
-                finally
-                {
-                    Monitor.Exit(sync);
-                }
-            }
-            else
-            {
-                return Enumerable.Empty<object>();
-            }
-        }
-
-        /// <summary>
-        /// Enumerator for the values of a specific type.
-        /// </summary>
-        /// <typeparam name="V">Type of the value which has to be a reference type.</typeparam>
-        /// <returns>Enumerator for the values of a specific type.</returns>
-        internal IEnumerable<V> Values<V>() where V : class
-        {
-            if (Monitor.TryEnter(sync, DefaultMonitorWait))
-            {
-                try
-                {
-                    return cache.Values
-                        .Select(cacheItem => cacheItem.Value)
-                        .Where(v => v.GetType() == typeof(V))
-                        .Cast<V>().ToList();
-                }
-                finally
-                {
-                    Monitor.Exit(sync);
-                }
-            }
-            else
-            {
-                return Enumerable.Empty<V>();
-            }
-        }
-
-        /// <summary>
-        /// Enumerator for all values.
-        /// </summary>
-        /// <returns>Enumerator for all values.</returns>
-        internal IEnumerable<object> Values()
-        {
-            if (Monitor.TryEnter(sync, DefaultMonitorWait))
-            {
-                try
-                {
-                    return cache.Values.Select(cacheItem => cacheItem.Value).ToList();
-                }
-                finally
-                {
-                    Monitor.Exit(sync);
-                }
-            }
-            else
-            {
-                return Enumerable.Empty<object>();
-            }
-        }
-
-        /// <summary>
-        /// Total amount of (key, value) pairs in the cache.
-        /// </summary>
-        /// <returns>Total amount of (key, value) pairs in the cache.</returns>
-        internal int Count()
-        {
-            if (Monitor.TryEnter(sync, DefaultMonitorWait))
-            {
-                try
-                {
-                    return cache.Keys.Count;
-                }
-                finally
-                {
-                    Monitor.Exit(sync);
-                }
-            }
-            else
-            {
-                return -1;
-            }
-        }
-
         private void Add<K, V>(K key, V value, TimeSpan timeSpan, bool isSliding) where V : class
         {
-            if (Monitor.TryEnter(sync, DefaultMonitorWait))
+            if (key == null)
             {
-                try
-                {
-                    Remove(key);
-                    cache.Add(key, new CacheItem(value, isSliding ? timeSpan : (TimeSpan?)null));
+                throw new ArgumentNullException(nameof(key));
+            }
 
-                    if (isSliding)
-                    {
-                        slidingTimes.Add(key, new SlidingDetails(timeSpan));
-                    }
-
-                    StartObserving(key, timeSpan);
-                }
-                finally
+            _lock.EnterWriteLock();
+            try
+            {
+                if (cache.TryGetValue(key, out CacheItem item))
                 {
-                    Monitor.Exit(sync);
+                    item.Value = value;
                 }
+                else
+                {
+                    item = new CacheItem(this, key);
+                    item.Value = value;
+                    cache.Add(key, item);
+                }
+
+                item.StartTimer(DateTime.Now + timeSpan, isSliding ? (TimeSpan?)timeSpan : null);
+            }
+            finally
+            {
+                _lock.ExitWriteLock();
             }
         }
 
-        private void StartObserving<K>(K key, TimeSpan timeSpan)
+        private void RemoveUnderLock(KeyValuePair<object, CacheItem> pair)
         {
-            Timer timer = null;
-            timer = new Timer(x =>
-            {
-                TryPurgeItem(key);
-                timer?.Dispose();
-            }, key, timeSpan, TimeSpan.FromMilliseconds(-1));
-        }
-
-        private void TryPurgeItem<K>(K key)
-        {
-            if (slidingTimes.ContainsKey(key))
-            {
-                TimeSpan tryAfter;
-                if (!slidingTimes[key].CanExpire(out tryAfter))
-                {
-                    StartObserving(key, tryAfter);
-                    return;
-                }
-            }
-
-            Remove(key);
+            pair.Value.Dispose();
+            cache.Remove(pair);
         }
 
         private class CacheItem
         {
-            public CacheItem() { }
+            private const int MaxTimer = int.MaxValue - 1;
 
-            public CacheItem(object value, TimeSpan? relativeExpiry)
+            private object _key;
+            private Cache _cache;
+            private Timer _timer;
+
+            public CacheItem(Cache cache, object key)
             {
-                Value = value;
-                RelativeExpiry = relativeExpiry;
+                _key = key;
+                _cache = cache;
+                _timer = new Timer(TimerFired, null, Timeout.Infinite, Timeout.Infinite);
             }
 
             public object Value { get; set; }
-            public TimeSpan? RelativeExpiry { get; set; }
-        }
+            public DateTime? Expiry;
+            public TimeSpan? SlidingExpiry { get; private set; }
 
-        private class SlidingDetails
-        {
-            private TimeSpan relativeExpiry;
-            private DateTime expireAt;
-
-            public SlidingDetails(TimeSpan relativeExpiry)
+            public void StartTimer(DateTime expiry, TimeSpan? slidingExpiry)
             {
-                this.relativeExpiry = relativeExpiry;
-                Viewed();
+                lock (_timer)
+                {
+                    Expiry = expiry;
+                    SlidingExpiry = slidingExpiry;
+                    RestartTimer();
+                }
             }
 
-            public bool CanExpire(out TimeSpan tryAfter)
+            public void Dispose()
             {
-                tryAfter = expireAt - DateTime.Now;
-                return (0 > tryAfter.Ticks);
+                lock (_timer)
+                {
+                    if (Expiry == null)
+                    {
+                        return;
+                    }
+
+                    Expiry = null;
+                    SlidingExpiry = null;
+                    _timer.Dispose();
+                }
             }
 
-            public void Viewed()
+            public void Hit()
             {
-                expireAt = DateTime.Now.Add(relativeExpiry);
+                lock (_timer)
+                {
+                    if (SlidingExpiry != null)
+                    {
+                        Expiry = DateTime.Now + SlidingExpiry.Value;
+                    }
+                }
+            }
+
+            private void RestartTimer()
+            {
+                long remainingMs = (long)(Expiry.Value - DateTime.Now).TotalMilliseconds;
+
+                if (remainingMs < 0)
+                {
+                    remainingMs = 0;
+                }
+                else if (remainingMs > MaxTimer)
+                {
+                    remainingMs = MaxTimer;
+                }
+
+                _timer.Change((int)remainingMs, Timeout.Infinite);
+            }
+
+            private void TimerFired(object state)
+            {
+                lock (_timer)
+                {
+                    if (Expiry == null)
+                    {
+                        return;
+                    }
+
+                    if (Expiry <= DateTime.Now)
+                    {
+                        _cache.Remove(new KeyValuePair<object, CacheItem>(_key, this));
+                    }
+                    else
+                    {
+                        RestartTimer();
+                    }
+                }
             }
         }
     }
