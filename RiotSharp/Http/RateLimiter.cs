@@ -9,6 +9,16 @@ namespace RiotSharp.Http
 {
     internal class RateLimiter
     {
+        /// <summary>
+        /// A delegate that is rate-limited.
+        /// </summary>
+        public delegate Task<T> RateLimitRoutineAsync<T>();
+
+        /// <summary>
+        /// A delegate that is rate-limited.
+        /// </summary>
+        public delegate T RateLimitRoutine<T>();
+
         /// <summary>Semaphore to prevent multiple requests from interferering with each other's rate limit
         /// calculations.</summary>
         private readonly SemaphoreSlim accessSemaphore = new SemaphoreSlim(1);
@@ -43,34 +53,58 @@ namespace RiotSharp.Http
 
         /// <summary>Blocks until a request can be made without violating rate limit rules. Release must be called
         /// after the request completes.</summary>
-        public void HandleRateLimit()
+        /// <param name="routine">The routine to rate-limit.</param>
+        public async Task<T> HandleRateLimitAsync<T>(RateLimitRoutineAsync<T> routine)
         {
-            accessSemaphore.Wait();
+            TimeSpan delay;
+            Exception exception = null;
+            T result = default(T);
+
+            await accessSemaphore.WaitAsync();
             try
             {
-                Task.Delay(GetDelay()).Wait();
+                delay = GetDelay();
+            }
+            finally
+            {
+                accessSemaphore.Release();
+            }
+
+            await Task.Delay(delay);
+
+            try
+            {
+                result = await routine();
+            }
+            catch (Exception e)
+            {
+                exception = e;
+            }
+
+            await accessSemaphore.WaitAsync();
+
+            try
+            {
                 UpdateDelay();
             }
             finally
             {
                 accessSemaphore.Release();
             }
+
+            if (exception != null)
+            {
+                throw exception;
+            }
+
+            return result;
         }
 
         /// <summary>Creates a task that blocks until a request can be made without violating rate limit rules. Release
         /// must be called after the task completes.</summary>
-        public async Task HandleRateLimitAsync()
+        public T HandleRateLimit<T>(RateLimitRoutine<T> routine)
         {
-            await accessSemaphore.WaitAsync();
-            try
-            {
-                await Task.Delay(GetDelay());
-                UpdateDelay();
-            }
-            finally
-            {
-                accessSemaphore.Release();
-            }
+            return HandleRateLimitAsync(() => { return Task.FromResult(routine()); }).GetAwaiter().GetResult();
         }
 
         /// <summary>

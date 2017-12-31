@@ -13,7 +13,7 @@ namespace RiotSharp.Http
     {
         protected string rootDomain;
         protected const string platformDomain = ".api.riotgames.com";
-        private readonly HttpTracingClient httpClient;
+        private readonly HttpClient httpClient;
 
         public string ApiKey { get; private set; }
 
@@ -22,7 +22,7 @@ namespace RiotSharp.Http
             if (string.IsNullOrWhiteSpace(apiKey))
                 throw new ArgumentNullException(nameof(apiKey));
             ApiKey = apiKey;
-            httpClient = new HttpTracingClient();
+            httpClient = new HttpClient(new HttpClientLogger());
             httpClient.DefaultRequestHeaders.Add("X-Riot-Token", ApiKey);
         }
 
@@ -59,7 +59,6 @@ namespace RiotSharp.Http
             }
             return response;
         }
-
 
         /// <summary>
         /// Send a put request synchronously.
@@ -145,7 +144,7 @@ namespace RiotSharp.Http
 
         protected void HandleRequestFailure(HttpResponseMessage response)
         {
-            Trace.TraceWarning($"Request {response.RequestMessage.RequestUri} failed {response.StatusCode}: {response.ReasonPhrase} with headers {string.Join(";", response.Headers)}");
+            Trace.TraceWarning($"Request {response.RequestMessage.RequestUri} failed {(int)response.StatusCode}: {response.ReasonPhrase} with headers\n{response.Headers}");
 
             switch (response.StatusCode)
             {

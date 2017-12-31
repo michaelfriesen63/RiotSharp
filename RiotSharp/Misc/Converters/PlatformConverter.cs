@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Diagnostics;
 using System.Reflection;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -43,8 +44,12 @@ namespace RiotSharp.Misc.Converters
                     return Platform.EUW1;
                 case "KR":
                     return Platform.KR;
+                case "JP1":
+                    return Platform.JP;
                 default:
-                    return null;
+                    Debug.Assert(false);
+                    Trace.TraceError($"Could not convert {str} to a platform; defaulting to NA1");
+                    return Platform.NA1;
             }
         }
 
@@ -81,6 +86,8 @@ namespace RiotSharp.Misc.Converters
                     return Region.euw;
                 case Platform.KR:
                     return Region.kr;
+                case Platform.JP:
+                    return Region.jp;
                 default:
                     return Region.na;
             }
