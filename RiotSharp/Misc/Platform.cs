@@ -67,6 +67,11 @@ namespace RiotSharp.Misc
         /// <summary>
         /// Japan.
         /// </summary>
-        JP
+        JP1,
+
+        /// <summary>
+        /// Public beta environment.
+        /// </summary>
+        PBE1,
     }
 }

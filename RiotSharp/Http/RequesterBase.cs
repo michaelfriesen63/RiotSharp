@@ -161,7 +161,15 @@ namespace RiotSharp.Http
                 case HttpStatusCode.Forbidden:
                     throw new RiotSharpException("403, Forbidden", response.StatusCode);
                 case (HttpStatusCode)429:
-                    throw new RiotSharpException("429, Rate Limit Exceeded", response.StatusCode);
+                    TimeSpan retryAfter = TimeSpan.Zero;
+                    if (response.Headers.TryGetValues("Retry-After", out IEnumerable<string> values))
+                    {
+                        if (int.TryParse(values.FirstOrDefault(), out int retrySeconds))
+                        {
+                            retryAfter = TimeSpan.FromSeconds(retrySeconds);
+                        }
+                    }
+                    throw new RateLimitException("429, Rate Limit Exceeded", response.StatusCode, retryAfter);
                 default:
                     throw new RiotSharpException("Unexpected failure", response.StatusCode);
             }
@@ -218,6 +226,8 @@ namespace RiotSharp.Http
                     return "na1";
                 case Region.oce:
                     return "oc1";
+                case Region.pbe:
+                    return "pbe1";
                 case Region.tr:
                     return "tr1";
                 case Region.ru:

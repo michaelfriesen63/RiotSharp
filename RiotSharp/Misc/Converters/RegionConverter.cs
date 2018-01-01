@@ -52,6 +52,9 @@ namespace RiotSharp.Misc.Converters
                 case "JP":
                 case "jp":
                     return Region.jp;
+                case "PBE":
+                case "pbe":
+                    return Region.pbe;
                 default:
                     return null;
             }

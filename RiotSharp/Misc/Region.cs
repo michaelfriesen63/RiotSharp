@@ -65,6 +65,11 @@ namespace RiotSharp.Misc
         jp,
 
         /// <summary>
+        /// Public beta environment.
+        /// </summary>
+        pbe,
+
+        /// <summary>
         /// Global.
         /// </summary>
         global

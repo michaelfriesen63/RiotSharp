@@ -45,7 +45,9 @@ namespace RiotSharp.Misc.Converters
                 case "KR":
                     return Platform.KR;
                 case "JP1":
-                    return Platform.JP;
+                    return Platform.JP1;
+                case "PBE1":
+                    return Platform.PBE1;
                 default:
                     Debug.Assert(false);
                     Trace.TraceError($"Could not convert {str} to a platform; defaulting to NA1");
@@ -86,9 +88,13 @@ namespace RiotSharp.Misc.Converters
                     return Region.euw;
                 case Platform.KR:
                     return Region.kr;
-                case Platform.JP:
+                case Platform.JP1:
                     return Region.jp;
+                case Platform.PBE1:
+                    return Region.pbe;
                 default:
+                    Debug.Assert(false);
+                    Trace.TraceError($"Could not convert {platform} to a region; defaulting to na");
                     return Region.na;
             }
         }

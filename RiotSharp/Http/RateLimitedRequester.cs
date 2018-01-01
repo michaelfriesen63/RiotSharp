@@ -5,6 +5,7 @@ using System.Text;
 using System.Threading.Tasks;
 using RiotSharp.Misc;
 using System;
+using System.Threading;
 
 namespace RiotSharp.Http
 {
@@ -15,9 +16,12 @@ namespace RiotSharp.Http
     {
         public readonly IDictionary<TimeSpan, int> RateLimits;
 
+        private ReaderWriterLockSlim rateLimitLock;
+
         public RateLimitedRequester(string apiKey, IDictionary<TimeSpan, int> rateLimits) : base(apiKey)
         {
             RateLimits = rateLimits;
+            rateLimitLock = new ReaderWriterLockSlim();
         }
 
         private readonly Dictionary<Region, RateLimiter> rateLimiters = new Dictionary<Region, RateLimiter>();
@@ -133,9 +137,43 @@ namespace RiotSharp.Http
         /// <returns></returns>
         private RateLimiter GetRateLimiter(Region region)
         {
-            if (!rateLimiters.ContainsKey(region))
-                rateLimiters[region] = new RateLimiter(RateLimits);
-            return rateLimiters[region]; 
+            rateLimitLock.EnterReadLock();
+            try
+            {
+                if (rateLimiters.TryGetValue(region, out RateLimiter rateLimiter))
+                {
+                    return rateLimiter;
+                }
+            }
+            finally
+            {
+                rateLimitLock.ExitReadLock();
+            }
+
+            rateLimitLock.EnterUpgradeableReadLock();
+            try
+            {
+                if (!rateLimiters.TryGetValue(region, out RateLimiter rateLimiter))
+                {
+                    rateLimiter = new RateLimiter(RateLimits);
+
+                    rateLimitLock.EnterWriteLock();
+                    try
+                    {
+                        rateLimiters[region] = rateLimiter;
+                    }
+                    finally
+                    {
+                        rateLimitLock.ExitWriteLock();
+                    }
+                }
+
+                return rateLimiter;
+            }
+            finally
+            {
+                rateLimitLock.ExitUpgradeableReadLock();
+            }
         }
     }
 }

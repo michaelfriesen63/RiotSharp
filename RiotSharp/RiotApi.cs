@@ -423,7 +423,7 @@ namespace RiotSharp
         {
             var wrapper = cache.Get<string, Match>(string.Format(MatchCache, region, matchId));
             if (wrapper != null) return wrapper;
-            var json = requester.CreateGetRequest(MatchRootUrl +
+            var json = await requester.CreateGetRequestAsync(MatchRootUrl +
                                                   string.Format(MatchByIdUrl, matchId), region);
             var match = await Task.Factory.StartNew(() =>
                 JsonConvert.DeserializeObject<Match>(json));
