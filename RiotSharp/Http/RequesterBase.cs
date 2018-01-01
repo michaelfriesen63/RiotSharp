@@ -1,6 +1,7 @@
 ﻿using RiotSharp.Misc;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
@@ -14,14 +15,15 @@ namespace RiotSharp.Http
         protected const string platformDomain = ".api.riotgames.com";
         private readonly HttpClient httpClient;
 
-        public string ApiKey { get; set; }
+        public string ApiKey { get; private set; }
 
         protected RequesterBase(string apiKey)
         {
             if (string.IsNullOrWhiteSpace(apiKey))
                 throw new ArgumentNullException(nameof(apiKey));
             ApiKey = apiKey;
-            httpClient = new HttpClient();
+            httpClient = new HttpClient(new HttpClientLogger());
+            httpClient.DefaultRequestHeaders.Add("X-Riot-Token", ApiKey);
         }
 
         #region Protected Methods
@@ -37,7 +39,7 @@ namespace RiotSharp.Http
             var response = httpClient.GetAsync(request.RequestUri).Result;
             if (!response.IsSuccessStatusCode)
             {
-                HandleRequestFailure(response.StatusCode);
+                HandleRequestFailure(response);
             }
             return response;
         }
@@ -53,11 +55,10 @@ namespace RiotSharp.Http
             var response = await httpClient.GetAsync(request.RequestUri);
             if (!response.IsSuccessStatusCode)
             {
-                HandleRequestFailure(response.StatusCode);
+                HandleRequestFailure(response);
             }
             return response;
         }
-
 
         /// <summary>
         /// Send a put request synchronously.
@@ -70,7 +71,7 @@ namespace RiotSharp.Http
             var response = httpClient.PutAsync(request.RequestUri, request.Content).Result;
             if (!response.IsSuccessStatusCode)
             {
-                HandleRequestFailure(response.StatusCode);
+                HandleRequestFailure(response);
             }
             return response;
         }
@@ -86,7 +87,7 @@ namespace RiotSharp.Http
             var response = await httpClient.PutAsync(request.RequestUri, request.Content);
             if (!response.IsSuccessStatusCode)
             {
-                HandleRequestFailure(response.StatusCode);
+                HandleRequestFailure(response);
             }
             return response;
         }
@@ -102,7 +103,7 @@ namespace RiotSharp.Http
             var response = httpClient.PostAsync(request.RequestUri, request.Content).Result;
             if (!response.IsSuccessStatusCode)
             {
-                HandleRequestFailure(response.StatusCode);
+                HandleRequestFailure(response);
             }
             return response;
         }
@@ -118,7 +119,7 @@ namespace RiotSharp.Http
             var response = await httpClient.PostAsync(request.RequestUri, request.Content);
             if (!response.IsSuccessStatusCode)
             {
-                HandleRequestFailure(response.StatusCode);
+                HandleRequestFailure(response);
             }
             return response;
         }
@@ -128,39 +129,41 @@ namespace RiotSharp.Http
         {
             var scheme = useHttps ? "https" : "http";
             var url = addedArguments == null ?
-                $"{scheme}://{rootDomain}{relativeUrl}?api_key={ApiKey}" :
-                $"{scheme}://{rootDomain}{relativeUrl}?{BuildArgumentsString(addedArguments)}api_key={ApiKey}";
+                $"{scheme}://{rootDomain}{relativeUrl}" :
+                $"{scheme}://{rootDomain}{relativeUrl}?{BuildArgumentsString(addedArguments)}";
 
-            return new HttpRequestMessage(httpMethod, url);
+            var request = new HttpRequestMessage(httpMethod, url);
+
+            return request;
         }
 
         protected string BuildArgumentsString(List<string> arguments)
         {
-            return arguments
-                .Where(arg => arg != string.Empty)
-                .Aggregate(string.Empty, (current, arg) => current + (arg + "&"));
+            return string.Join("&", arguments.Where(arg => arg != string.Empty));
         }
 
-        protected void HandleRequestFailure(HttpStatusCode statusCode)
+        protected void HandleRequestFailure(HttpResponseMessage response)
         {
-            switch (statusCode)
+            Trace.TraceWarning($"Request {response.RequestMessage.RequestUri} failed {(int)response.StatusCode}: {response.ReasonPhrase} with headers\n{response.Headers}");
+
+            switch (response.StatusCode)
             {
                 case HttpStatusCode.ServiceUnavailable:
-                    throw new RiotSharpException("503, Service unavailable", statusCode);
+                    throw new RiotSharpException("503, Service unavailable", response.StatusCode);
                 case HttpStatusCode.InternalServerError:
-                    throw new RiotSharpException("500, Internal server error", statusCode);
+                    throw new RiotSharpException("500, Internal server error", response.StatusCode);
                 case HttpStatusCode.Unauthorized:
-                    throw new RiotSharpException("401, Unauthorized", statusCode);
+                    throw new RiotSharpException("401, Unauthorized", response.StatusCode);
                 case HttpStatusCode.BadRequest:
-                    throw new RiotSharpException("400, Bad request", statusCode);
+                    throw new RiotSharpException("400, Bad request", response.StatusCode);
                 case HttpStatusCode.NotFound:
-                    throw new RiotSharpException("404, Resource not found", statusCode);
+                    throw new RiotSharpException("404, Resource not found", response.StatusCode);
                 case HttpStatusCode.Forbidden:
-                    throw new RiotSharpException("403, Forbidden", statusCode);
+                    throw new RiotSharpException("403, Forbidden", response.StatusCode);
                 case (HttpStatusCode)429:
-                    throw new RiotSharpException("429, Rate Limit Exceeded", statusCode);
+                    throw new RiotSharpException("429, Rate Limit Exceeded", response.StatusCode);
                 default:
-                    throw new RiotSharpException("Unexpeced failure", statusCode);
+                    throw new RiotSharpException("Unexpected failure", response.StatusCode);
             }
         }
 

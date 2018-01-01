@@ -62,6 +62,11 @@ namespace RiotSharp.Misc
         /// <summary>
         /// Korea.
         /// </summary>
-        KR
+        KR,
+
+        /// <summary>
+        /// Japan.
+        /// </summary>
+        JP
     }
 }
