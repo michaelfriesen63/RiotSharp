@@ -26,15 +26,15 @@ namespace RiotSharp.Http
 
         private Timer _timer;
 
-        private readonly RateLimit _retryLimit;
+        private readonly RetryRateLimit _retryLimit;
 
-        private readonly List<RateLimit> _limits;
+        private readonly List<IRateLimit> _limits;
 
         private readonly LinkedList<TaskCompletionSource<uint>> _queue;
 
         public RateLimiter(IDictionary<TimeSpan, int> rateLimits)
         {
-            _limits = new List<RateLimit>(rateLimits.Count);
+            _limits = new List<IRateLimit>(rateLimits.Count);
             foreach (var pair in rateLimits)
             {
                 double intervalMs = Math.Ceiling(pair.Key.TotalMilliseconds);
@@ -54,7 +54,7 @@ namespace RiotSharp.Http
             }
 
             _retryLimit = new RetryRateLimit();
-            //_limits.Add(_retryLimit);
+            _limits.Add(_retryLimit);
 
             _queue = new LinkedList<TaskCompletionSource<uint>>();
 
@@ -87,6 +87,7 @@ namespace RiotSharp.Http
         {
             TaskCompletionSource<uint> task = new TaskCompletionSource<uint>();
             Exception exception = null;
+            RateLimitException rateLimitException = null;
             T result = default(T);
 
             lock (_limits)
@@ -102,7 +103,7 @@ namespace RiotSharp.Http
             }
             catch (RateLimitException e)
             {
-                // TODO set the retry rate limit.
+                rateLimitException = e;
                 exception = e;
             }
             catch (Exception e)
@@ -113,6 +114,10 @@ namespace RiotSharp.Http
             {
                 lock (_limits)
                 {
+                    if (rateLimitException != null)
+                    {
+                        _retryLimit.Enable(GetTickCount(), (uint)rateLimitException.RetryAfter.TotalMilliseconds);
+                    }
                     Complete();
                 }
             }
@@ -156,7 +161,7 @@ namespace RiotSharp.Http
                 return false;
             }
 
-            foreach (RateLimit limit in _limits)
+            foreach (IRateLimit limit in _limits)
             {
                 if (!limit.CanStart())
                 {
@@ -168,16 +173,14 @@ namespace RiotSharp.Http
         }
 
         private void Start() {
-            uint currentTick = GetTickCount();
-
-            foreach (RateLimit limit in _limits)
+            foreach (IRateLimit limit in _limits)
             {
-                limit.Start(currentTick);
+                limit.Start();
             }
 
             TaskCompletionSource<uint> task = _queue.First.Value;
             _queue.RemoveFirst();
-            task.SetResult(currentTick);
+            task.SetResult(0);
         }
 
         private void TimerExpiredCallback(object stateObject)
@@ -204,7 +207,7 @@ namespace RiotSharp.Http
 
             _timerRunning = false;
 
-            foreach (RateLimit limit in _limits)
+            foreach (IRateLimit limit in _limits)
             {
                 limit.ProcessExpiry(currentTick);
             }
@@ -223,7 +226,7 @@ namespace RiotSharp.Http
             uint hardLimit = uint.MaxValue;
             uint softLimit = 0;
 
-            foreach (RateLimit limit in _limits)
+            foreach (IRateLimit limit in _limits)
             {
                 if (!limit.CanStart())
                 {
@@ -254,7 +257,7 @@ namespace RiotSharp.Http
         {
             uint currentTick = GetTickCount();
 
-            foreach (RateLimit limit in _limits)
+            foreach (IRateLimit limit in _limits)
             {
                 limit.Complete(currentTick);
             }
@@ -275,7 +278,16 @@ namespace RiotSharp.Http
             }
         }
 
-        private class RateLimit
+        private interface IRateLimit
+        {
+            bool CanStart();
+            void Complete(uint currentTick);
+            uint NextExpiry(uint currentTick);
+            void ProcessExpiry(uint currentTick);
+            void Start();
+        }
+
+        private class RateLimit : IRateLimit
         {
             private uint _limitCount;
             private uint _intervalTicks;
@@ -299,7 +311,7 @@ namespace RiotSharp.Http
                 return _availableCount > 0;
             }
 
-            public void Start(uint currentTick)
+            public void Start()
             {
                 if (!CanStart())
                 {
@@ -346,6 +358,11 @@ namespace RiotSharp.Http
 
             public void ProcessExpiry(uint currentTick)
             {
+                if (_availableCount == _limitCount)
+                {
+                    return;
+                }
+
                 if (!Tick.GreaterThan(_startTick + _intervalTicks, currentTick))
                 {
                     Trace.TraceInformation($"{this} expired at {currentTick}");
@@ -357,15 +374,81 @@ namespace RiotSharp.Http
 
             public override string ToString()
             {
-                return string.Format($"RateLimit-{_intervalTicks}");
+                return string.Format($"RateLimit-{_intervalTicks}:{_availableCount}/{_limitCount}");
             }
         }
 
-        private class RetryRateLimit : RateLimit
+        private class RetryRateLimit : IRateLimit
         {
-            public RetryRateLimit() : base(0, 0)
-            {
+            private bool _enabled;
+            private uint _expiryTick;
 
+            public void Enable(uint currentTick, uint interval)
+            {
+                if (interval == 0)
+                {
+                    interval = 1000;        // 1 second.
+                }
+
+                uint newExpiry = currentTick + interval;
+
+                if (!_enabled || Tick.GreaterThan(_expiryTick, newExpiry))
+                {
+                    Trace.TraceInformation($"RetryRateLimit enabled={_enabled} setting expiry to {currentTick}+{interval}");
+                    _enabled = true;
+                    _expiryTick = newExpiry;
+                }
+            }
+
+            public bool CanStart()
+            {
+                return !_enabled;
+            }
+
+            public void Complete(uint currentTick)
+            {
+            }
+
+            public uint NextExpiry(uint currentTick)
+            {
+                uint expiry;
+
+                if (_enabled)
+                {
+                    if (Tick.GreaterThan(_expiryTick, currentTick))
+                    {
+                        expiry = _expiryTick - currentTick;
+                    }
+                    else
+                    {
+                        expiry = 0;
+                    }
+                }
+                else
+                {
+                    expiry = uint.MaxValue;
+                }
+
+                Trace.TraceInformation($"NextExpiry(RetryRateLimit) expiry={expiry} enabled={_enabled}");
+                return expiry;
+            }
+
+            public void ProcessExpiry(uint currentTick)
+            {
+                if (_enabled && !Tick.GreaterThan(_expiryTick, currentTick))
+                {
+                    Trace.TraceInformation($"RetryRateLimit expired at {currentTick}");
+                    _enabled = false;
+                }
+            }
+
+            public void Start()
+            {
+            }
+
+            public override string ToString()
+            {
+                return "RetryRateLimit";
             }
         }
     }
