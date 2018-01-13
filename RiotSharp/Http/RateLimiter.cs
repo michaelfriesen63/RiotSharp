@@ -62,8 +62,13 @@ namespace RiotSharp.Http
             _timer = new Timer(TimerExpiredCallback);
         }
 
-        /// <summary>Blocks until a request can be made without violating rate limit rules. Release must be called
-        /// after the request completes.</summary>
+        /// <summary>Creates a task that blocks until a request can be made without violating rate limit rules.</summary>
+        public T HandleRateLimit<T>(RateLimitRoutine<T> routine)
+        {
+            return HandleRateLimitAsync(() => { return Task.FromResult(routine()); }).GetAwaiter().GetResult();
+        }
+
+        /// <summary>Blocks until a request can be made without violating rate limit rules.</summary>
         /// <param name="routine">The routine to rate-limit.</param>
         public async Task<T> HandleRateLimitAsync<T>(RateLimitRoutineAsync<T> routine)
         {
@@ -128,13 +133,6 @@ namespace RiotSharp.Http
             }
 
             return result;
-        }
-
-        /// <summary>Creates a task that blocks until a request can be made without violating rate limit rules. Release
-        /// must be called after the task completes.</summary>
-        public T HandleRateLimit<T>(RateLimitRoutine<T> routine)
-        {
-            return HandleRateLimitAsync(() => { return Task.FromResult(routine()); }).GetAwaiter().GetResult();
         }
 
         private void Enqueue(TaskCompletionSource<uint> task, bool front = false)

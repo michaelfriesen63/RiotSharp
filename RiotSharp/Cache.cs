@@ -52,15 +52,12 @@ namespace RiotSharp
         /// <returns>The value if the key exists in the cache, null otherwise.</returns>
         public V Get<K, V>(K key) where V : class
         {
+            CacheItem item = null;
+
             _lock.EnterReadLock();
             try
             {
-                if (cache.TryGetValue(key, out CacheItem item))
-                {
-                    item.Hit();
-                    return (V)item.Value;
-                }
-                else
+                if (!cache.TryGetValue(key, out item))
                 {
                     return null;
                 }
@@ -69,6 +66,9 @@ namespace RiotSharp
             {
                 _lock.ExitReadLock();
             }
+
+            item.Hit();
+            return (V)item.Value;
         }
 
         /// <summary>
