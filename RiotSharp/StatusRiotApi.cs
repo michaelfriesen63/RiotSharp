@@ -2,10 +2,10 @@
 using RiotSharp.Http;
 using RiotSharp.Http.Interfaces;
 using RiotSharp.Interfaces;
-using RiotSharp.StatusEndpoint;
 using System.Threading.Tasks;
 using RiotSharp.Misc;
 using System;
+using RiotSharp.Endpoints.StatusEndpoint;
 
 namespace RiotSharp
 {
@@ -52,18 +52,11 @@ namespace RiotSharp
 
         #region Public Methods      
 
-        public ShardStatus GetShardStatus(Region region)
-        {
-            var json = requester.CreateGetRequest(StatusRootUrl, region, null, true);
-
-            return JsonConvert.DeserializeObject<ShardStatus>(json);
-        }
-
         public async Task<ShardStatus> GetShardStatusAsync(Region region)
         {
-            var json = await requester.CreateGetRequestAsync(StatusRootUrl, region, null, true);
+            var json = await requester.CreateGetRequestAsync(StatusRootUrl, region, null, true).ConfigureAwait(false);
 
-            return await Task.Factory.StartNew(() => JsonConvert.DeserializeObject<ShardStatus>(json));
+            return JsonConvert.DeserializeObject<ShardStatus>(json);
         }
 
         #endregion

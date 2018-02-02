@@ -27,22 +27,6 @@ namespace RiotSharp.Http
         #region Protected Methods
 
         /// <summary>
-        /// Send a get request synchronously.
-        /// </summary>
-        /// <param name="request"></param>
-        /// <returns></returns>
-        /// <exception cref="RiotSharpException">Thrown if an Http error occurs. Contains the Http error code and error message.</exception>
-        protected HttpResponseMessage Get(HttpRequestMessage request)
-        {
-            var response = httpClient.GetAsync(request.RequestUri).Result;
-            if (!response.IsSuccessStatusCode)
-            {
-                HandleRequestFailure(response.StatusCode);
-            }
-            return response;
-        }
-
-        /// <summary>
         /// Send a get request asynchronously.
         /// </summary>
         /// <param name="request"></param>
@@ -50,24 +34,7 @@ namespace RiotSharp.Http
         /// <exception cref="RiotSharpException">Thrown if an Http error occurs. Contains the Http error code and error message.</exception>
         protected async Task<HttpResponseMessage> GetAsync(HttpRequestMessage request)
         {
-            var response = await httpClient.GetAsync(request.RequestUri);
-            if (!response.IsSuccessStatusCode)
-            {
-                HandleRequestFailure(response.StatusCode);
-            }
-            return response;
-        }
-
-
-        /// <summary>
-        /// Send a put request synchronously.
-        /// </summary>
-        /// <param name="request"></param>
-        /// <returns></returns>
-        /// <exception cref="RiotSharpException">Thrown if an Http error occurs. Contains the Http error code and error message.</exception>
-        protected HttpResponseMessage Put(HttpRequestMessage request)
-        {
-            var response = httpClient.PutAsync(request.RequestUri, request.Content).Result;
+            var response = await httpClient.GetAsync(request.RequestUri, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
             if (!response.IsSuccessStatusCode)
             {
                 HandleRequestFailure(response.StatusCode);
@@ -83,23 +50,7 @@ namespace RiotSharp.Http
         /// <exception cref="RiotSharpException">Thrown if an Http error occurs. Contains the Http error code and error message.</exception>
         protected async Task<HttpResponseMessage> PutAsync(HttpRequestMessage request)
         {
-            var response = await httpClient.PutAsync(request.RequestUri, request.Content);
-            if (!response.IsSuccessStatusCode)
-            {
-                HandleRequestFailure(response.StatusCode);
-            }
-            return response;
-        }
-
-        /// <summary>
-        /// Send a post request synchronously.
-        /// </summary>
-        /// <param name="request"></param>
-        /// <returns></returns>
-        /// <exception cref="RiotSharpException">Thrown if an Http error occurs. Contains the Http error code and error message.</exception>
-        protected HttpResponseMessage Post(HttpRequestMessage request)
-        {
-            var response = httpClient.PostAsync(request.RequestUri, request.Content).Result;
+            var response = await httpClient.PutAsync(request.RequestUri, request.Content).ConfigureAwait(false);
             if (!response.IsSuccessStatusCode)
             {
                 HandleRequestFailure(response.StatusCode);
@@ -115,7 +66,7 @@ namespace RiotSharp.Http
         /// <exception cref="RiotSharpException">Thrown if an Http error occurs. Contains the Http error code and error message.</exception>
         protected async Task<HttpResponseMessage> PostAsync(HttpRequestMessage request)
         {
-            var response = await httpClient.PostAsync(request.RequestUri, request.Content);
+            var response = await httpClient.PostAsync(request.RequestUri, request.Content).ConfigureAwait(false);
             if (!response.IsSuccessStatusCode)
             {
                 HandleRequestFailure(response.StatusCode);
@@ -164,28 +115,13 @@ namespace RiotSharp.Http
             }
         }
 
-        protected string GetResponseContent(HttpResponseMessage response)
-        {
-            var result = string.Empty;
-
-            using (var content = response.Content)
-            { 
-                result = content.ReadAsStringAsync().Result;
-            }
-            return result;
-        }
-
         protected async Task<string> GetResponseContentAsync(HttpResponseMessage response)
         {
-            Task<string> result = null;
             using (response)
+            using (var content = response.Content)
             {
-                using (var content = response.Content)
-                {
-                    result = content.ReadAsStringAsync();
-                }
+                return await content.ReadAsStringAsync().ConfigureAwait(false);
             }
-            return await result;
         }
 
         protected string GetPlatformDomain(Region region)
@@ -221,6 +157,12 @@ namespace RiotSharp.Http
                     return "ru";
                 case Region.global:
                     return "global";
+                case Region.Americas:
+                    return "americas";
+                case Region.Europe:
+                    return "europe";
+                case Region.Asia:
+                    return "asia";
                 default:
                     throw new NotImplementedException();
             }

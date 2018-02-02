@@ -3,6 +3,7 @@ using RiotSharp.Http;
 using RiotSharp.Interfaces;
 using System;
 using System.Collections.Generic;
+using RiotSharp.Caching;
 
 namespace RiotSharp.AspNetCore
 {
@@ -39,17 +40,19 @@ namespace RiotSharp.AspNetCore
                 });
 
                 if (riotSharpOptions.RiotApi.UseMemoryCache)
-                {
-                    serviceCollection.AddMemoryCache();
                     serviceCollection.AddSingleton<ICache, MemoryCache>();
-                }
+                else if (riotSharpOptions.RiotApi.UseDistributedCache)
+                    serviceCollection.AddSingleton<ICache, DistributedCache>();
+                else if (riotSharpOptions.RiotApi.UseHybridCache)
+                    serviceCollection.AddSingleton<ICache, HybridCache>();
                 else if (riotSharpOptions.RiotApi.UseCache)
                     serviceCollection.AddSingleton<ICache, Cache>();
                 else
                     serviceCollection.AddSingleton<ICache, PassThroughCache>();
 
                 serviceCollection.AddSingleton<IStaticRiotApi>(serviceProvider => 
-                    new StaticRiotApi(staticApiRequester, serviceProvider.GetRequiredService<ICache>(), riotSharpOptions.RiotApi.SlidingExpirationTime)); 
+                    new StaticRiotApi(staticApiRequester, serviceProvider.GetRequiredService<ICache>(), 
+                        riotSharpOptions.RiotApi.SlidingExpirationTime)); 
             }
 
             if (riotSharpOptions.TournamentApi.ApiKey != null)

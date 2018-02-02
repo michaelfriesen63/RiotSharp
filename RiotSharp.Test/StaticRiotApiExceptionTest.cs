@@ -1,6 +1,4 @@
 ﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
-using RiotSharp;
-using RiotSharp.StaticDataEndpoint;
 using RiotSharp.Misc;
 
 namespace RiotSharp.Test
@@ -15,7 +13,7 @@ namespace RiotSharp.Test
         [ExpectedException(typeof(RiotSharpException))]
         public void GetStatic_ShouldThrowRiotSharpException_Test()
         {
-            FaultyStaticApi.GetChampion(Region.euw, 1);
+            FaultyStaticApi.GetChampionAsync(Region.euw, 1).GetAwaiter().GetResult();
         }
     }
 }

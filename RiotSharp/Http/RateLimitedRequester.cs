@@ -24,21 +24,6 @@ namespace RiotSharp.Http
 
         #region Public Methods
 
-        public string CreateGetRequest(string relativeUrl, Region region, List<string> addedArguments = null,
-            bool useHttps = true)
-        {
-            rootDomain = GetPlatformDomain(region);
-
-            var request = PrepareRequest(relativeUrl, addedArguments, useHttps, HttpMethod.Get);
-
-            GetRateLimiter(region).HandleRateLimit();
-
-            using (var response = Get(request))
-            {
-                return GetResponseContent(response);
-            }
-        }
-
         public async Task<string> CreateGetRequestAsync(string relativeUrl, Region region, List<string> addedArguments = null, 
             bool useHttps = true)
         {
@@ -46,30 +31,14 @@ namespace RiotSharp.Http
 
             var request = PrepareRequest(relativeUrl, addedArguments, useHttps, HttpMethod.Get);
             
-            await GetRateLimiter(region).HandleRateLimitAsync();
+            await GetRateLimiter(region).HandleRateLimitAsync().ConfigureAwait(false);
 
-            using (var response = await GetAsync(request))
+            using (var response = await GetAsync(request).ConfigureAwait(false))
             {
-                return await GetResponseContentAsync(response);
+                return await GetResponseContentAsync(response).ConfigureAwait(false);
             }
         }
-
-        public string CreatePostRequest(string relativeUrl, Region region, string body,
-            List<string> addedArguments = null, bool useHttps = true)
-        {
-            rootDomain = GetPlatformDomain(region);
-
-            var request = PrepareRequest(relativeUrl, addedArguments, useHttps, HttpMethod.Post);
-            request.Content = new StringContent(body, Encoding.UTF8, "application/json");
-
-            GetRateLimiter(region).HandleRateLimit();
-
-            using (var response = Post(request))
-            {
-                return GetResponseContent(response);
-            }     
-        }
-
+        
         public async Task<string> CreatePostRequestAsync(string relativeUrl, Region region, string body,
             List<string> addedArguments = null, bool useHttps = true)
         {
@@ -78,28 +47,12 @@ namespace RiotSharp.Http
             var request = PrepareRequest(relativeUrl, addedArguments, useHttps, HttpMethod.Post);
             request.Content = new StringContent(body, Encoding.UTF8, "application/json");
 
-            await GetRateLimiter(region).HandleRateLimitAsync();
+            await GetRateLimiter(region).HandleRateLimitAsync().ConfigureAwait(false);
 
-            using (var response = await PostAsync(request))
+            using (var response = await PostAsync(request).ConfigureAwait(false))
             {
-                return await GetResponseContentAsync(response);
+                return await GetResponseContentAsync(response).ConfigureAwait(false);
             }
-        }
-
-        public bool CreatePutRequest(string relativeUrl, Region region, string body, List<string> addedArguments = null,
-            bool useHttps = true)
-        {
-            rootDomain = GetPlatformDomain(region);
-
-            var request = PrepareRequest(relativeUrl, addedArguments, useHttps, HttpMethod.Put);
-            request.Content = new StringContent(body, Encoding.UTF8, "application/json");
-
-            GetRateLimiter(region).HandleRateLimit();
-
-            using (var response = Put(request))
-            {
-                return (int)response.StatusCode >= 200 && (int)response.StatusCode < 300;
-            }              
         }
 
         public async Task<bool> CreatePutRequestAsync(string relativeUrl, Region region, string body,
@@ -110,9 +63,9 @@ namespace RiotSharp.Http
             var request = PrepareRequest(relativeUrl, addedArguments, useHttps, HttpMethod.Put);
             request.Content = new StringContent(body, Encoding.UTF8, "application/json");
 
-            await GetRateLimiter(region).HandleRateLimitAsync();
+            await GetRateLimiter(region).HandleRateLimitAsync().ConfigureAwait(false);
 
-            using (var response = await PutAsync(request))
+            using (var response = await PutAsync(request).ConfigureAwait(false))
             {
                 return (int)response.StatusCode >= 200 && (int)response.StatusCode < 300;
             }                

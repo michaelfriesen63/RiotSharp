@@ -18,23 +18,15 @@ namespace RiotSharp.Http
         {
         }
 
-        #region Public Methods        
-        public string CreateGetRequest(string relativeUrl, Region region, List<string> addedArguments = null,
-            bool useHttps = true)
-        {
-            rootDomain = GetPlatformDomain(region);
-            var request = PrepareRequest(relativeUrl, addedArguments, useHttps, HttpMethod.Get);
-            var response = Get(request);
-            return GetResponseContent(response);
-        }
+        #region Public Methods
 
         public async Task<string> CreateGetRequestAsync(string relativeUrl, Region region,
             List<string> addedArguments = null, bool useHttps = true)
         {
             rootDomain = GetPlatformDomain(region);
             var request = PrepareRequest(relativeUrl, addedArguments, useHttps, HttpMethod.Get);
-            var response = await GetAsync(request);
-            return await GetResponseContentAsync(response);
+            var response = await GetAsync(request).ConfigureAwait(false);
+            return await GetResponseContentAsync(response).ConfigureAwait(false);
         }
         #endregion
     }
